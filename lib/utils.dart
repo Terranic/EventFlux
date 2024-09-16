@@ -9,14 +9,11 @@ enum LogEvent {
 
 /// Returns the emoji corresponding to the given [event].
 _getEmoji(LogEvent event) {
-  switch (event) {
-    case LogEvent.info:
-      return 'ℹ️';
-    case LogEvent.error:
-      return '❌';
-    case LogEvent.reconnect:
-      return '🔄';
-  }
+  return switch (event) {
+    LogEvent.info => 'ℹ️',
+    LogEvent.reconnect => '🔄',
+    LogEvent.error => '❌',
+  };
 }
 
 /// Logs the given [message] with the corresponding [event] and [tag].
