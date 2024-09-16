@@ -314,6 +314,7 @@ class EventFlux extends EventFluxBase {
       }
 
       ///Applying transforms and listening to it
+      print("STAAAAAAAAAAAAAAART STREAM-------------");
       _streamSubscription = data.stream
           .transform(const Utf8Decoder())
           .transform(StreamTransformer<String, String>.fromHandlers(
