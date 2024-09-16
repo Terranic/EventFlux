@@ -316,108 +316,116 @@ class EventFlux extends EventFluxBase {
       ///Applying transforms and listening to it
       _streamSubscription = data.stream
           .transform(const Utf8Decoder())
-          .transform(const LineSplitter())
-          .listen(
-            (dataLine) {
-              if (dataLine.isEmpty) {
-                /// When the data line is empty, it indicates that the complete event set has been read.
-                /// The event is then added to the stream.
-                _streamController!.add(currentEventFluxData);
-                if (logReceivedData) {
-                  eventFluxLog(
-                    currentEventFluxData.data.toString(),
-                    LogEvent.info,
-                    _tag,
-                  );
-                }
-                currentEventFluxData =
-                    EventFluxData(data: '', id: '', event: '');
-                return;
-              }
-
-              /// Parsing each line through the regex.
-              Match match = lineRegex.firstMatch(dataLine)!;
-              var field = match.group(1);
-              if (field!.isEmpty) {
-                return;
-              }
-              var value = '';
-              if (field == 'data') {
-                /// If the field is data, we get the data through the substring
-                value = dataLine.substring(5);
-              } else {
-                value = match.group(2) ?? '';
-              }
-              switch (field) {
-                case 'event':
-                  currentEventFluxData.event = value;
-                  break;
-                case 'data':
-                  currentEventFluxData.data =
-                      '${currentEventFluxData.data}$value\n';
-                  break;
-                case 'id':
-                  currentEventFluxData.id = value;
-                  break;
-                case 'retry':
-                  break;
-              }
-            },
-            cancelOnError: true,
-            onDone: () async {
-              eventFluxLog('Stream Closed', LogEvent.info, _tag);
-              await _stop();
-
-              /// When the stream is closed, onClose can be called to execute a function.
-              if (onConnectionClose != null) onConnectionClose();
-
-              _attemptReconnectIfNeeded(
-                _isExplicitDisconnect,
-                autoReconnect,
-                type,
-                url,
-                header,
-                onSuccessCallback,
-                onError: onError,
-                onConnectionClose: onConnectionClose,
-                httpClient: httpClient,
-                body: body,
-                files: files,
-                multipartRequest: multipartRequest,
-              );
-            },
-            onError: (error, s) async {
+          .transform(StreamTransformer<String, String>.fromHandlers(
+        handleData: (data, sink) {
+          // Split incoming data on double newlines to process full SSE events.
+          var events = data.split('\n\n');
+          for (var event in events) {
+            if (event.isNotEmpty) {
+              sink.add(event);
+            }
+          }
+        },
+      )).listen(
+        (dataLine) {
+          if (dataLine.isEmpty) {
+            /// When the data line is empty, it indicates that the complete event set has been read.
+            /// The event is then added to the stream.
+            _streamController!.add(currentEventFluxData);
+            if (logReceivedData) {
               eventFluxLog(
-                'Data Stream Listen Error: ${data.statusCode}: $error ',
-                LogEvent.error,
+                currentEventFluxData.data.toString(),
+                LogEvent.info,
                 _tag,
               );
+            }
+            currentEventFluxData = EventFluxData(data: '', id: '', event: '');
+            return;
+          }
 
-              /// Executes the onError function if it is not null
-              if (onError != null) {
-                onError(EventFluxException(
-                  message: error.toString(),
-                  statusCode: data.statusCode,
-                  reasonPhrase: data.reasonPhrase,
-                ));
-              }
+          /// Parsing each line through the regex.
+          Match match = lineRegex.firstMatch(dataLine)!;
+          var field = match.group(1);
+          if (field!.isEmpty) {
+            return;
+          }
+          var value = '';
+          if (field == 'data') {
+            /// If the field is data, we get the data through the substring
+            value = dataLine.substring(5);
+          } else {
+            value = match.group(2) ?? '';
+          }
+          switch (field) {
+            case 'event':
+              currentEventFluxData.event = value;
+              break;
+            case 'data':
+              currentEventFluxData.data =
+                  '${currentEventFluxData.data}$value\n';
+              break;
+            case 'id':
+              currentEventFluxData.id = value;
+              break;
+            case 'retry':
+              break;
+          }
+        },
+        cancelOnError: true,
+        onDone: () async {
+          eventFluxLog('Stream Closed', LogEvent.info, _tag);
+          await _stop();
 
-              _attemptReconnectIfNeeded(
-                _isExplicitDisconnect,
-                autoReconnect,
-                type,
-                url,
-                header,
-                onSuccessCallback,
-                onError: onError,
-                onConnectionClose: onConnectionClose,
-                httpClient: httpClient,
-                body: body,
-                files: files,
-                multipartRequest: multipartRequest,
-              );
-            },
+          /// When the stream is closed, onClose can be called to execute a function.
+          if (onConnectionClose != null) onConnectionClose();
+
+          _attemptReconnectIfNeeded(
+            _isExplicitDisconnect,
+            autoReconnect,
+            type,
+            url,
+            header,
+            onSuccessCallback,
+            onError: onError,
+            onConnectionClose: onConnectionClose,
+            httpClient: httpClient,
+            body: body,
+            files: files,
+            multipartRequest: multipartRequest,
           );
+        },
+        onError: (error, s) async {
+          eventFluxLog(
+            'Data Stream Listen Error: ${data.statusCode}: $error ',
+            LogEvent.error,
+            _tag,
+          );
+
+          /// Executes the onError function if it is not null
+          if (onError != null) {
+            onError(EventFluxException(
+              message: error.toString(),
+              statusCode: data.statusCode,
+              reasonPhrase: data.reasonPhrase,
+            ));
+          }
+
+          _attemptReconnectIfNeeded(
+            _isExplicitDisconnect,
+            autoReconnect,
+            type,
+            url,
+            header,
+            onSuccessCallback,
+            onError: onError,
+            onConnectionClose: onConnectionClose,
+            httpClient: httpClient,
+            body: body,
+            files: files,
+            multipartRequest: multipartRequest,
+          );
+        },
+      );
 
       if (data.statusCode == 200) {
         onSuccessCallback(
