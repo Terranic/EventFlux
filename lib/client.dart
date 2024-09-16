@@ -319,6 +319,7 @@ class EventFlux extends EventFluxBase {
           .transform(StreamTransformer<String, String>.fromHandlers(
         handleData: (data, sink) {
           // Split incoming data on double newlines to process full SSE events.
+          print("REEEEEECEIVED ---------------------------------");
           var events = data.split('\n\n');
           for (var event in events) {
             if (event.isNotEmpty) {
